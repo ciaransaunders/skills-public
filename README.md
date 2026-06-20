@@ -14,7 +14,7 @@ Expert verification of UK employment law documents to tribunal and appellate sta
 Review, draft, and improve legal writing — correspondence, case analysis reports, memos, and skeleton arguments — applying SQE-level standards and the IRAC methodology. Built on *Written Skills for Lawyers* (5th ed.).
 
 ### [`prompt-architect`](./prompt-architect/)
-Create and optimise prompt templates for AI assistants and autonomous agents. Covers chat mode vs. autonomous mode design, model-specific patterns for Claude 4.6, GPT-5.4, and Gemini 3, and a full library of structured blocks for agentic workflows.
+Create and optimise prompt templates for AI assistants and autonomous agents. Covers chat mode vs. autonomous mode design, model-specific patterns for Claude Fable 5 / Mythos 5, Claude Opus 4.8, GPT-5.5, and Gemini 3.5 Flash, and a full library of structured blocks for agentic workflows (verification loops, completeness contracts, tool persistence, memory systems, scope boundaries, and more).
 
 ## How to Use
 
