@@ -1,10 +1,11 @@
+---
+name: prompt-architect
+description: Create and optimize reusable prompt templates for AI assistants and autonomous agents. Use when user says "make a prompt for this task", "improve this prompt", "write a prompt template", "create a prompt for [task]", "optimize this prompt", or requests help designing instructions for LLMs or agents. Also trigger when the user asks about prompting best practices, how to prompt a specific model (Claude Fable 5, Claude Opus 4.8, GPT-5.5, Gemini 3.x), or wants to translate a prompt from one model to another. Incorporates vendor-specific prompt engineering guidance from Anthropic (Claude Fable 5/Mythos 5, Claude Opus 4.8), OpenAI (GPT-5.5), and Google (Gemini 3.5 Flash), plus research on the Prompting Inversion, Over-Specification Paradox, and the four-layer instruction stack for autonomous agents.
+---
+
 # Prompt Architect
 
-Create and optimise reusable prompt templates for AI assistants and autonomous agents. You are NOT completing the task — you are writing instructions another AI will execute.
-
-Use this skill when someone asks to make a prompt for a task, improve an existing prompt, write a prompt template, or asks about prompting best practices for any LLM.
-
----
+Create reusable prompt templates optimised for modern LLMs and autonomous agents. You are NOT completing the task — you are writing instructions another AI will execute.
 
 ## Step 0: Determine Execution Mode and Target Model
 
@@ -15,19 +16,19 @@ Before anything else, determine two things. Ask the user OR infer from context:
 | Mode | Signal | Design Strategy |
 |------|--------|-----------------|
 | **Chat** | Single-turn or back-and-forth; human in the loop; quick iteration | Minimise specification. Over-specification penalty applies. |
-| **Autonomous** | Agent runs unattended; multi-step; no mid-run correction | Maximise specification. Under-specification causes silent failure. |
+| **Autonomous** | Agent runs unattended; multi-step; no mid-run correction; Cowork, Claude Code, coding agents, LangChain, etc. | Maximise specification. Completeness is the bottleneck. Under-specification causes silent failure. |
 
 ### B. Target Model
 
 | Model Family | Key Prompt Characteristics |
 |-------------|---------------------------|
-| **Claude 4.6** (Opus/Sonnet) | Adaptive thinking; very proactive tool use — dial *back* aggressive triggering language; XML tags preferred; concise by default |
-| **GPT-5.4** | Reasoning effort knob (none/low/medium/high/xhigh); XML-block structured prompts; explicit output contracts; strong personality adherence |
-| **Gemini 3.1 Pro** | Dynamic thinking (thinking_level: minimal/low/medium/high); temperature MUST stay at 1.0; negative constraints placed LAST; less verbose by default |
-| **Gemini 3 Flash** | Same thinking_level system; minimal level available; optimised for speed/cost |
+| **Claude Fable 5 / Mythos 5** | Effort `high` default; `xhigh` for capability-sensitive workloads; `medium`/`low` for routine/interactive; **adaptive thinking only — no extended thinking budgets; summarized-only thinking output**; individual turns can run for many minutes — adjust client timeouts and streaming before deploying; **one brief instruction steers an entire behaviour pattern** (no need to enumerate); can over-elaborate at high/xhigh — use a brevity instruction; parallel subagents dispatched more readily than prior models; safety classifiers cover offensive cybersecurity + biology → `stop_reason: "refusal"` — configure fallback to Opus 4.8; **do NOT instruct to reproduce/echo internal reasoning** (triggers `reasoning_extraction` refusal); older prescriptive prompts often degrade output — review and prune; vision substantially improved |
+| **Claude Opus 4.8** (and Opus 4.7/4.6, Sonnet 4.6, Haiku 4.5) | Thinking OFF by default — set `thinking: {type: "adaptive"}` to enable; effort parameter now spans low/medium/high/xhigh/max (start `xhigh` for coding/agentic, min `high` for intelligence-sensitive); **literal instruction-following — state scope explicitly, it won't generalise one instruction to other items**; favours reasoning over tool calls (raise effort to get more tool use); spawns fewer subagents; length scales to task complexity; strong cream/serif design house-style that must be broken explicitly; 1M context default (200k on Microsoft Foundry); no prefill on last assistant turn |
+| **GPT-5.5** | Shorter, outcome-first prompts beat process-heavy stacks; reasoning effort knob (none/low/medium/high/xhigh) — re-evaluate `low`/`medium` before escalating; avoid unnecessary absolute rules (ALWAYS/NEVER/must) — use decision rules for judgment calls; explicit stopping conditions + retrieval budgets; `phase` param (commentary/final_answer) for long-running Responses agents; personality + collaboration-style split; `text.verbosity` control |
+| **Gemini 3.5 Flash** (and 3.1 Pro, 3.1 Flash-Lite) | `thinking_level` minimal/low/medium/high — **default is now `medium`** (was high); `low` much improved for code/agentic; remove temperature/top_p/top_k (use defaults); thought preservation automatic across turns — pass full unmodified history with thought signatures; strict function-response matching (id + name + count); put multimodal content and inline instructions INSIDE function responses; negative constraints + question placed LAST, after data; no Computer Use (use Gemini 3 Flash Preview for that) |
 | **Unknown/Generic** | Constraint-based, minimal scaffolding, XML structure |
 
-**This distinction governs everything below.** Chat-mode prompts and autonomous-agent specifications are different design problems with opposite failure modes.
+**This distinction governs everything below.** Chat-mode prompts and autonomous-agent specifications are different design problems with opposite failure modes. Model-specific patterns prevent common pitfalls.
 
 ---
 
@@ -35,49 +36,74 @@ Before anything else, determine two things. Ask the user OR infer from context:
 
 ### Core Principle: Specification Threshold
 
-Quality follows a non-monotonic curve. Below threshold S* ≈ 0.5, detail improves performance. Beyond it, additional specification causes degradation ("cognitive leakage"). Aim for maximum clarity with minimum structural overhead.
+Quality follows a non-monotonic curve. Below threshold S* ≈ 0.5, detail improves performance. Beyond it, additional specification causes **quadratic degradation** ("cognitive leakage"). Aim for maximum clarity with minimum structural overhead.
 
 ### Model-Specific Chat Guidance
 
-#### Claude 4.6
+#### Claude Opus 4.8
 
-- **Do NOT over-prompt tool use.** Claude 4.6 is proactive. Replace "CRITICAL: You MUST use this tool when..." with "Use this tool when...". Over-triggering language will cause overtriggering.
-- **Adaptive thinking is the default.** Do not include "think step by step" — Claude decides when to think.
-- **Effort parameter replaces budget_tokens.** Steer depth via effort (low/medium/high/max).
-- **No prefilled responses.** Use structured outputs, XML tags, or direct instructions to control format instead.
-- **Concise by default.** If you want verbose output, ask explicitly.
-- **Prefer telling Claude what TO do** rather than what not to do.
-- **XML tags strongly preferred** for structuring inputs, outputs, and instructions.
+- **Thinking is OFF by default.** Unlike 4.6, Opus 4.8 does not think unless you set `thinking: {type: "adaptive"}`. Enable it for multi-step reasoning, agentic loops, and complex coding. If it thinks more often than you want (common with large system prompts), steer it: "Thinking adds latency and should only be used when it will meaningfully improve answer quality — when in doubt, respond directly."
+- **Effort now spans low/medium/high/xhigh/max.** This is the primary depth lever — more important than on any prior Opus. Start `xhigh` for coding/agentic work, minimum `high` for intelligence-sensitive tasks, `medium`/`low` for latency- or cost-sensitive scoped work. If reasoning looks shallow, raise effort rather than prompting around it. `max` can overthink — test before adopting.
+- **It follows instructions literally and does NOT generalise.** This is the biggest behavioural shift. If an instruction should apply broadly, say so: "Apply this to every section, not just the first." Do not assume it will infer scope from one example. The upside is precision for structured extraction and pipelines.
+- **It favours reasoning over tool calls.** If you want more tool use (search, file reads), raise effort to `high`/`xhigh` and/or describe explicitly when and why to use each tool.
+- **Length scales to task complexity** rather than a fixed verbosity. If you need a consistent style, specify it; positive examples of the right concision beat "don't be verbose."
+- **Fewer subagents and tighter user updates by default.** Remove old scaffolding that forced interim status messages ("summarise every 3 tool calls") — it now produces good updates on its own.
+- **Design work has a strong, persistent house style** (cream `#F4F1EA`, serif display, terracotta accent). Generic "don't use cream" just swaps to another fixed palette. To break it, either specify a concrete alternative palette/typeface, or ask it to propose 3-4 directions first and pick one.
+- **No prefilled responses** on the last assistant turn. Use structured outputs, XML tags, or direct instructions.
+- **Prefer telling Claude what TO do**, and **XML tags** for structuring inputs/outputs/instructions.
 
-#### GPT-5.4
+#### GPT-5.5
 
-- **Use XML-block structured prompts.** GPT-5.4 excels with named blocks like `<output_contract>`, `<verbosity_controls>`, `<tool_persistence_rules>`.
-- **Define an explicit output contract:**
+- **Outcome-first, not process-heavy.** GPT-5.5's biggest shift: describe the destination — target outcome, success criteria, constraints, available evidence, and what the final answer must contain — then let the model choose the path. Do NOT carry over every step from an older GPT-5.x prompt stack; legacy process-spelling adds noise and narrows its search.
+- **Avoid unnecessary absolute rules.** Reserve ALWAYS/NEVER/must/only for true invariants (safety, required output fields, actions that must never happen). For judgment calls — when to search, ask, use a tool, keep iterating — write decision rules instead.
+- **Add explicit stopping conditions.** State when to stop, retry, fall back, or ask. Example: "Resolve the request in the fewest useful tool loops, but do not let loop-minimisation outrank correctness or required citations. After each result ask: can I answer the core request now? If yes, answer."
+- **Reasoning effort: re-evaluate low/medium before escalating.** GPT-5.5 reasons more efficiently than 5.4, so lower levels often suffice. It remains a last-mile knob — try a stronger prompt first.
+- **Output contracts and follow-through policy still work** (named XML blocks like `<output_contract>`, `<default_follow_through_policy>`), but keep them lean. Set `text.verbosity` (default medium; `low` for concise).
+- **Personality + collaboration style, kept short and separate.** Personality controls how it sounds (tone, warmth, directness); collaboration style controls how it works (when it asks vs assumes, how proactive, when it checks work). Neither replaces clear goals or stop rules.
+- **Preamble for perceived latency.** For tool-heavy/multi-step tasks, ask for a one-to-two-sentence visible update acknowledging the request and stating the first step before tool calls.
+- **`phase` for long-running Responses agents.** Use `phase: "commentary"` for interim updates and `phase: "final_answer"` for the answer; if manually replaying assistant items, preserve each `phase` value unchanged.
+
+#### Gemini 3.5 Flash (and Gemini 3.x)
+
+- **Remove temperature, top_p, and top_k.** All Gemini 3.x reasoning is optimised for default sampling. Changing them causes looping and degraded reasoning. For determinism, write explicit rules in a system instruction instead.
+- **`thinking_level` controls depth — default is now `medium`** on 3.5 Flash (down from `high` on Gemini 3 Flash Preview). Use `minimal` for speed/simple queries, `low` for code/agentic tasks needing fewer steps (much improved), `medium` for most work, `high` for hard reasoning/math. Never combine `thinking_level` with legacy `thinking_budget` (400 error).
+- **Place negative/formatting/quantitative constraints LAST**, after context and the main task. Gemini drops constraints that appear too early.
+- **Put the question after the data.** For large inputs (books, codebases, long transcripts), place instructions at the end and anchor with "Based on the preceding information…".
+- **Avoid broad negative instructions** like "do not infer/guess" — they make the model refuse basic logic and arithmetic. Instead: "Reason strictly from the provided text; do not introduce external information."
+- **Less verbose by default.** For conversational output, steer explicitly ("Explain as a friendly, talkative assistant").
+- **Function calling is strict:** every `FunctionResponse` must include the matching `id` and `name`, with exactly one response per call. Put multimodal content and any extra inline instructions INSIDE the function response (append instructions to the response text after two newlines), never as separate parts — otherwise you get thought leakage and lower-quality output.
+- **Thought preservation is automatic** across turns; pass the full, unmodified history (including thought signatures) so reasoning context carries forward. The SDKs handle this.
+- **To reduce excessive tool calls,** lower the thinking level first, then add a system instruction with an explicit action budget ("You have a limited budget of N tool calls; use them efficiently").
+- **No Computer Use** in 3.5 Flash — stay on Gemini 3 Flash Preview for those workloads.
+
+#### Claude Fable 5 / Mythos 5
+
+- **Effort is the primary control: use `high` as the default.** Use `xhigh` for the most capability-sensitive work (complex reasoning, research, high-stakes output). Use `medium` or `low` for routine tasks or when you want a faster, more interactive working style. Even `low` Fable 5 often exceeds `xhigh` Opus 4.8 on prior benchmarks.
+- **Adaptive thinking only — no extended thinking budgets.** Set `thinking: {type: "adaptive"}` as on Opus 4.8, but there is no budget parameter. Thinking output is summarized-only; do not instruct the model to echo, transcribe, or explain its internal reasoning as response text — this triggers the `reasoning_extraction` refusal category and causes elevated fallbacks to Opus 4.8.
+- **Turns can run for many minutes.** Individual hard tasks can block for minutes; autonomous runs can extend for hours. Adjust client timeouts and streaming indicators before migrating. Consider asynchronous harnesses (scheduled jobs) over blocking patterns.
+- **One brief instruction steers an entire behaviour pattern.** Instruction-following is improved enough that you do not need to enumerate each case. For over-elaboration at high effort, a single brevity instruction suffices — for example:
   ```
-  <output_contract>
-  - Return exactly the sections requested, in the requested order.
-  - If a format is required (JSON, Markdown, SQL, XML), output only that format.
-  - Apply length limits only to the section they are intended for.
-  </output_contract>
+  Lead with the outcome. Your first sentence should answer "what happened" or "what did you find."
+  Supporting detail comes after. To keep output short, be selective (drop details that don't change
+  what the reader does next), not terse (no arrow chains, abbreviations, or jargon).
   ```
-- **Reasoning effort is a last-mile knob.** Default to none for execution tasks, low for instruction-following, medium for research/synthesis. Always try stronger prompts before raising reasoning effort.
-- **Explicit follow-through policy:**
+- **Checkpoint behavior: stop only when genuinely blocked.** To prevent unwanted mid-run pauses, tell it when pausing is legitimate:
   ```
-  <default_follow_through_policy>
-  - If the user's intent is clear and the next step is reversible and low-risk, proceed.
-  - Ask permission only if the step is irreversible, has external side effects, or requires missing sensitive information.
-  </default_follow_through_policy>
+  Pause only when the work requires it: a destructive or irreversible action, a real scope change,
+  or input only the user can provide. If you hit one of these, ask and end the turn.
   ```
+- **Define explicit scope boundaries.** Fable 5 can take unrequested actions (drafting emails, creating backup branches). State what it should and should not do:
+  ```
+  When the user is describing a problem or thinking out loud, the deliverable is your assessment —
+  report findings and stop. Don't apply a fix until asked. Before running any command that changes
+  system state, check that the evidence supports that specific action.
+  ```
+- **Give the reason, not just the request.** Context about *why* lets Fable 5 connect the task to relevant information rather than inferring intent. Especially for long-running agents: "I'm working on [larger task] for [who]. They need [what the output enables]. With that in mind: [request]."
+- **Safety classifiers cover offensive cybersecurity and biology/life sciences.** Benign work in these domains can also trigger them. The response returns `stop_reason: "refusal"`. Configure server-side or client-side fallback to Claude Opus 4.8 for automatic re-routing.
+- **Vision is substantially improved.** Fable 5 interprets dense technical images, web apps, and screenshots with higher accuracy and often fewer output tokens. It is trained to use bash and crop tools for flipped, blurry, or noisy images.
+- **Older prompts and skills are often too prescriptive.** Prompts written for prior models can degrade Fable 5 output quality. Before deploying an existing prompt, test default performance and remove instructions that are no longer needed.
 
-#### Gemini 3 / 3.1 Pro
 
-- **NEVER change temperature from 1.0.** Lower values cause looping and degraded performance.
-- **Place negative constraints LAST.** Structure prompts as: [Context] → [Main task] → [Negative/formatting/quantitative constraints].
-- **Do not use broad negative instructions** like "do not infer" or "do not guess" — these cause the model to refuse basic logic. Instead: "Perform calculations and logical deductions based strictly on the provided text. Do not introduce external information."
-- **For grounding:** "The provided context is the only source of truth for this session."
-- **thinking_level controls reasoning depth.** Use low for latency-sensitive tasks, high for complex reasoning.
-
-### Chat Output Structure
 
 Always produce exactly three sections:
 
@@ -85,13 +111,14 @@ Always produce exactly three sections:
 List minimal, non-overlapping variables:
 - Use `{$UPPERCASE_NAME}` format
 - Each variable appears exactly ONCE in substitution form
+- Semantically named for content
 
 #### 2. `<Strategy_Note>`
 One sentence: target model, execution mode, and key design choice.
 
 #### 3. `<Instructions>`
 Order matters:
-1. Role/context (1–2 sentences max)
+1. Role/context (1-2 sentences max)
 2. Input variables in XML tags: `<tag>{$VARIABLE}</tag>`
 3. Task constraints (what NOT to do) — for Gemini, place these last
 4. Output format specification
@@ -103,22 +130,50 @@ Order matters:
 | Avoid | Why |
 |-------|-----|
 | Numbered rules > 5 items | Structural overhead dominates |
-| Redundant restatements | Token waste, hyper-literalism |
-| "Think step by step" (reasoning models) | Disrupts internal reasoning |
-| "CRITICAL: You MUST use this tool" (Claude 4.6) | Causes overtriggering |
-| Temperature tuning (Gemini 3) | Causes looping; leave at 1.0 |
-| Negative constraints at top (Gemini 3) | Gets dropped; place at end |
+| Redundant restatements | Token waste, hyper-literalism (esp. Opus 4.8) |
+| "Think step by step" (reasoning models) | Disrupts internal reasoning in Claude Opus 4.8, GPT-5.5, Gemini 3.x |
+| "CRITICAL: You MUST use this tool" (Claude) | Causes overtriggering; use calm language |
+| Assuming an instruction generalises (Opus 4.8) | It follows literally; state scope ("every section, not just the first") |
+| Process-heavy step lists (GPT-5.5) | Adds noise; prefer outcome-first + stop rules |
+| Unnecessary ALWAYS/NEVER/must (GPT-5.5) | Reserve for true invariants; use decision rules otherwise |
+| Temperature/top_p/top_k tuning (Gemini 3.x) | Causes looping; remove and use defaults |
+| Negative constraints at top (Gemini 3.x) | Gets dropped; place at end, after data |
+| Generic "don't use cream" for Opus 4.8 design | Just swaps palette; specify an alternative or ask for options |
+| "Show your reasoning" / "explain your thinking" (Fable 5) | Triggers `reasoning_extraction` refusal → elevated fallback to Opus 4.8 |
+| Extended thinking budget on Fable 5 | Not supported; adaptive only — no budget parameter |
+| Carrying over old prescriptive prompts to Fable 5 | Over-specification degrades output; test defaults first, prune |
+| Not adjusting timeouts for Fable 5 | Hard tasks run for minutes; async runs for hours — blocking harnesses will time out |
+| Verbose natural language | Formal syntax more efficient |
+| Multiple examples when one suffices | Diminishing returns |
 | Lengthy preambles | Delays core instruction |
 
+### Effective Patterns (Chat Mode)
+
+| Pattern | When |
+|---------|------|
+| Explicit XML output tags | Always |
+| Conditional logic: "IF [x], THEN [y]" | Branching behavior needed |
+| Single canonical example | Non-trivial task |
+| Negative constraints (placed last for Gemini) | Known failure modes exist |
+| Self-checkable validation criteria | Quality matters |
+| Explicit persona + collaboration style (GPT-5.5) | Customer-facing writing |
+| Effort/thinking_level calibration note | Performance tuning needed |
+
 ### Calibration Checklist (Chat Mode)
+
+Before finalising, verify:
 
 1. **Removability test**: Can any instruction be removed without ambiguity?
 2. **Rule count**: More than 5 enumerated rules? Consolidate or convert to prose.
 3. **Redundancy check**: Any repeated emphasis? Remove it.
 4. **Model-specific check**: Does this prompt violate any target-model anti-patterns?
 5. **Token efficiency**: Could this be said in fewer words without losing clarity?
-6. **Constraint ordering** (Gemini): Are negative constraints at the end?
-7. **Tool-use tone** (Claude 4.6): Is triggering language calm, not aggressive?
+6. **Constraint ordering** (Gemini 3.x): Are negative constraints at the end, after the data?
+7. **Tool-use tone** (Claude): Is triggering language calm, not aggressive?
+8. **Scope is explicit** (Opus 4.8): Does any instruction that should apply broadly say so, rather than relying on the model to generalise?
+9. **Reasoning echo removed** (Fable 5): Does the prompt avoid asking the model to reproduce, echo, or explain its internal reasoning?
+10. **Effort level set** (Fable 5): Is effort specified? `high` for most tasks, `xhigh` for capability-sensitive, `medium`/`low` for routine/fast.
+11. **Fallback configured** (Fable 5): If cybersecurity or biology content is possible, is `stop_reason: "refusal"` handled with a fallback to Opus 4.8?
 
 ---
 
@@ -126,7 +181,7 @@ Order matters:
 
 When the prompt will drive an agent that runs unattended, the over-specification penalty inverts: **under-specification is the primary failure mode.** The agent cannot ask for clarification mid-run. A missing constraint or ambiguous objective propagates silently through dozens of steps.
 
-Autonomous prompts are built across four layers. All four must be present for reliable autonomous execution.
+Autonomous prompts are built across four layers. Each layer addresses a different failure mode. All four must be present for reliable autonomous execution.
 
 ### Layer 1: Prompt Craft (Clear Instructions)
 
@@ -173,13 +228,11 @@ Turn the work into a structured document the agent can execute against without f
 6. **Definition of wrong**: Failed outcomes even if steps "completed."
 7. **Edge cases**: IF [condition] THEN [response].
 
----
+### Model-Specific Autonomous Blocks
 
-## Reusable Structured Blocks for Autonomous Agents
+For autonomous agents, include these structured blocks adapted to the target model. These are proven patterns from vendor documentation — include the ones relevant to the task.
 
-Include the relevant blocks from this library in any autonomous specification.
-
-### Verification Loop (essential for high-impact actions)
+#### Verification Loop (all models, essential for high-impact actions)
 
 ```
 <verification_loop>
@@ -191,7 +244,7 @@ Before finalising:
 </verification_loop>
 ```
 
-### Completeness Contract
+#### Completeness Contract (GPT-5.5 pattern, useful for all models)
 
 ```
 <completeness_contract>
@@ -202,7 +255,7 @@ Before finalising:
 </completeness_contract>
 ```
 
-### Tool Persistence Rules
+#### Tool Persistence Rules (critical for agentic workflows)
 
 ```
 <tool_persistence_rules>
@@ -213,7 +266,7 @@ Before finalising:
 </tool_persistence_rules>
 ```
 
-### Dependency Checks
+#### Dependency Checks (GPT-5.5 pattern, prevents skipped prerequisites)
 
 ```
 <dependency_checks>
@@ -223,7 +276,7 @@ Before finalising:
 </dependency_checks>
 ```
 
-### Empty-Result Recovery
+#### Empty-Result Recovery (prevents premature "not found" conclusions)
 
 ```
 <empty_result_recovery>
@@ -234,7 +287,7 @@ If a lookup returns empty, partial, or suspiciously narrow results:
 </empty_result_recovery>
 ```
 
-### Research Mode
+#### Research Mode (for research, review, and synthesis tasks)
 
 ```
 <research_mode>
@@ -246,12 +299,13 @@ Stop only when more searching is unlikely to change the conclusion.
 </research_mode>
 ```
 
-### Citation and Grounding Rules
+#### Citation and Grounding Rules (critical for research agents)
 
 ```
 <citation_rules>
 - Only cite sources retrieved in the current workflow.
 - Never fabricate citations, URLs, IDs, or quote spans.
+- Use exactly the citation format required by the host application.
 - Attach citations to the specific claims they support, not only at the end.
 </citation_rules>
 
@@ -263,7 +317,7 @@ Stop only when more searching is unlikely to change the conclusion.
 </grounding_rules>
 ```
 
-### Missing Context Gate
+#### Missing Context Gate (prevents hallucination under uncertainty)
 
 ```
 <missing_context_gating>
@@ -274,7 +328,7 @@ Stop only when more searching is unlikely to change the conclusion.
 </missing_context_gating>
 ```
 
-### Parallel Tool Calling
+#### Parallel Tool Calling (when independent work can run simultaneously)
 
 ```
 <parallel_tool_calling>
@@ -284,7 +338,7 @@ Stop only when more searching is unlikely to change the conclusion.
 </parallel_tool_calling>
 ```
 
-### User Updates
+#### User Updates (for agents with progress reporting)
 
 ```
 <user_updates_spec>
@@ -294,9 +348,83 @@ Stop only when more searching is unlikely to change the conclusion.
 </user_updates_spec>
 ```
 
----
+#### Fable 5: Memory System (recommended for long-running or multi-session agents)
 
-## Autonomous Output Structure
+```
+<memory_system>
+Maintain a memory file at [PATH]. For each lesson learned or confirmed approach:
+- One file per lesson; one-line summary at the top.
+- Record corrections and confirmed approaches alike, including why they mattered.
+- Do not save what the repo or chat history already records.
+- Update an existing note rather than creating a duplicate.
+- Delete notes that turn out to be wrong.
+Reference [PATH] at the start of each run.
+</memory_system>
+```
+
+#### Fable 5: Progress Audit (prevents fabricated status reports on long runs)
+
+```
+<progress_audit>
+Before reporting progress, audit each claim against a tool result from this session.
+Only report work you can point to evidence for; if something is not yet verified, say so
+explicitly. Report outcomes faithfully: if tests fail, say so with the output; if a step
+was skipped, say that; when something is done and verified, state it plainly without hedging.
+</progress_audit>
+```
+
+#### Fable 5: Scope Boundary (prevents unrequested side-effects)
+
+```
+<scope_boundary>
+When the user is describing a problem, asking a question, or thinking out loud rather than
+requesting a change, the deliverable is your assessment. Report your findings and stop.
+Do not apply a fix until explicitly asked.
+Before running any command that changes system state (restarts, deletes, config edits),
+check that the evidence actually supports that specific action. A signal that pattern-matches
+to a known failure may have a different cause.
+Do not create backups, send messages, or draft content that was not requested.
+</scope_boundary>
+```
+
+#### Fable 5: Autonomous Communication Style (for async runs where the user was not watching)
+
+```
+<async_communication_style>
+Terse shorthand between tool calls is fine — that is you thinking out loud.
+Your final summary is different: it is for a reader who did not see any of your working.
+Write it as a re-grounding, not a continuation:
+- Outcome first: one sentence on what happened or what you found.
+- Then the one or two things you need from them, each explained as if new.
+- Drop working shorthand, arrow chains, hyphen-stacked compounds, and labels you made up.
+- Write complete sentences. Spell out terms. Give each file, commit, or flag its own plain-language clause.
+- If you have to choose between short and clear, choose clear.
+</async_communication_style>
+```
+
+#### Fable 5: Autonomous Continuation Guard (prevents early stopping)
+
+```
+<continuation_guard>
+You are operating autonomously. The user is not watching in real time.
+For reversible actions that follow from the original request, proceed without asking.
+Before ending your turn, check your last paragraph: if it is a plan, a list of next steps,
+or a promise about work you have not done ("I'll…", "let me know…"), do that work now
+with tool calls. End your turn only when the task is complete or you are genuinely blocked
+on input only the user can provide.
+</continuation_guard>
+```
+
+#### Fable 5: Context Budget Reassurance (prevents premature session handoff on long runs)
+
+```
+<context_budget_reassurance>
+You have ample context remaining. Do not stop, summarize, or suggest a new session on
+account of context limits. Continue the work.
+</context_budget_reassurance>
+```
+
+
 
 Produce four sections:
 
@@ -315,6 +443,7 @@ Enumerate what the agent needs access to and verify completeness:
 - Reference examples of good output
 
 #### 4. `<Agent_Spec>`
+Structured specification:
 
 ```
 ## Objective
@@ -341,7 +470,7 @@ Enumerate what the agent needs access to and verify completeness:
 2. ...
 
 ## Structured Blocks
-[Include relevant blocks from the library above]
+[Include relevant blocks from the Model-Specific Autonomous Blocks section above]
 
 ## Acceptance Criteria
 - [criterion 1]
@@ -357,23 +486,23 @@ Enumerate what the agent needs access to and verify completeness:
 - IF [condition] THEN [response]
 ```
 
----
+### Thinking/Reasoning Configuration Guide
 
-## Reasoning/Thinking Configuration Reference
+When the prompt needs to specify reasoning behaviour, use this reference:
 
 | Model | Parameter | Recommended Defaults |
 |-------|-----------|---------------------|
-| Claude 4.6 Opus | `thinking: {type: "adaptive"}` + `effort` | effort=high for complex, medium for most, low for fast |
-| Claude 4.6 Sonnet | `thinking: {type: "adaptive"}` + `effort` | effort=medium for most; low for latency-sensitive |
-| GPT-5.4 | `reasoning_effort` | none for execution; low for instruction-following; medium for research; high for long-horizon agents |
-| Gemini 3.1 Pro | `thinking_level` | high for reasoning; low for chat/throughput; medium for balanced |
-| Gemini 3 Flash | `thinking_level` | minimal for speed; low for light reasoning |
+| Claude Fable 5 / Mythos 5 | `thinking: {type: "adaptive"}` (no budget); summarized-only output | effort=high for most tasks; xhigh for capability-sensitive work; medium/low for routine or interactive; never instruct to echo/reproduce thinking |
+| Claude Opus 4.8 | `thinking: {type: "adaptive"}` (OFF unless set) + `effort` | effort=xhigh for coding/agentic, min high for intelligence-sensitive, medium/low for fast scoped work; max only if evals justify (can overthink) |
+| Claude Sonnet 4.6 / Haiku 4.5 | `thinking: {type: "adaptive"}` + `effort` | Sonnet defaults to effort=high; use medium for most, low for latency-sensitive; set a large max_tokens at medium+/high |
+| GPT-5.5 | `reasoning_effort` | none for execution; low for instruction-following; medium for research/synthesis; re-evaluate low/medium before high/xhigh (5.5 reasons more efficiently) |
+| Gemini 3.1 Pro | `thinking_level` | high (default) for reasoning; low for chat/throughput; medium for balanced |
+| Gemini 3.5 Flash | `thinking_level` | medium (default) for most; low for code/agentic with fewer steps; minimal for speed; high for hard reasoning |
+| Gemini 3.1 Flash-Lite | `thinking_level` | minimal (default) for high-volume/low-cost; low for light reasoning |
 
 **Rule of thumb**: Before raising reasoning effort, first add verification loops, completeness contracts, and tool persistence rules. Prompt improvements are cheaper and often more effective than reasoning budget increases.
 
----
-
-## Anti-Patterns (Autonomous Mode)
+### Anti-Patterns (Autonomous Mode)
 
 | Avoid | Why |
 |-------|-----|
@@ -386,6 +515,22 @@ Enumerate what the agent needs access to and verify completeness:
 | No edge case handling | First unexpected input derails the run |
 | No verification loop before irreversible actions | Catches requirement misses and format drift |
 | No empty-result recovery | Agent concludes "not found" on first failed search |
+| No dependency checks | Agent skips prerequisite steps because end state seems obvious |
+
+### Calibration Checklist (Autonomous Mode)
+
+Before finalising, verify:
+
+1. **Absence test**: Could a competent human follow this spec without asking questions?
+2. **Context completeness**: Is every piece of information the agent needs loaded or referenced?
+3. **Intent clarity**: Could someone read the objective and success signal and know exactly what "good" looks like?
+4. **Decision boundary coverage**: For every judgment call, is there guidance on proceed vs. escalate?
+5. **Failure mode coverage**: Have you listed what "wrong" looks like?
+6. **Constraint priority**: If two constraints conflict, does the spec resolve which wins?
+7. **Decomposition test**: Is each step small enough that failure is detectable before it propagates?
+8. **Structured blocks**: Are the relevant autonomous blocks included (verification, completeness, tool persistence, etc.)?
+9. **Model-specific check**: Does this spec respect the target model's anti-patterns?
+10. **Thinking/reasoning config**: Is the recommended reasoning effort documented for the deployment?
 
 ---
 
@@ -393,30 +538,20 @@ Enumerate what the agent needs access to and verify completeness:
 
 1. **Determine execution mode** — chat or autonomous?
 2. **Identify target model** — different models have different failure modes.
-3. If **chat**: check for model-specific anti-patterns, measure if 30% of tokens could be removed, consolidate rules, add output format if missing. For Claude 4.6, dial back aggressive tool-triggering language. For Gemini, move negative constraints to end.
-4. If **autonomous**: run the Absence Test first. Then check for missing context, unspecified intent, absent acceptance criteria, undefined failure modes, and missing structured blocks.
-5. If **migrating between models**:
-   - GPT-5.x → Claude 4.6: Remove `developer` role, use `system`; replace `<output_contract>` blocks with XML-structured instructions; remove prefill patterns.
-   - Claude → GPT-5.4: Add explicit output contracts and follow-through policies; wrap constraints in named XML blocks; add reasoning_effort recommendation.
-   - Either → Gemini 3: Lock temperature at 1.0; move negative constraints to end; add thinking_level.
+3. If **chat**: check for model-specific anti-patterns, measure if 30% of tokens could be removed, consolidate rules, add output format if missing, remove hedging language. For Claude, dial back aggressive tool-triggering language and make broad-scope instructions explicit (Opus 4.8 takes them literally). For GPT-5.5, convert process steps into outcome-first goals with stop rules. For Gemini 3.x, move negative constraints to the end.
+4. If **autonomous**: run the Absence Test first. Then check for missing context, unspecified intent, absent acceptance criteria, undefined failure modes, and missing structured blocks (verification loop, completeness contract, etc.). **Add structure before removing words.**
+5. If **migrating between models**: translate model-specific patterns using the guidance above. Common migrations:
+   - GPT-5.x → Claude Opus 4.8: Remove `developer` role, use `system`; replace `<output_contract>` blocks with XML-structured instructions; remove prefill patterns; map reasoning_effort to effort (and remember thinking is OFF unless you set adaptive); make any broad-scope instruction explicit, since Opus 4.8 won't generalise it.
+   - Claude → GPT-5.5: Shift from process steps to outcome-first goals with stop rules; add explicit output contracts and a follow-through policy; convert ALWAYS/NEVER lists into decision rules; add a reasoning_effort recommendation and `text.verbosity`.
+   - Either → Gemini 3.5 Flash: Remove temperature/top_p/top_k; move negative constraints and the question to the end (after data); set `thinking_level` (default medium); ensure thought signatures and matching id/name are circulated in tool-calling chains; put multimodal content inside function responses.
+   - Any model → Fable 5: (1) Remove any extended thinking budget — adaptive only, no budget parameter; (2) Audit for instructions that tell the model to echo, reproduce, or explain its reasoning — remove them (triggers `reasoning_extraction` refusal); (3) Adjust harness timeouts and streaming — hard tasks can block for minutes; (4) Review and prune old prescriptive instructions — default performance is often better without them; (5) Configure fallback to Opus 4.8 for `stop_reason: "refusal"` (cybersecurity/biology domains); (6) Add Fable 5-specific autonomous blocks (progress audit, scope boundary, memory system, continuation guard) for long-running agents; (7) Replace effort=max or effort=xhigh defaults with effort=high unless the task genuinely needs peak capability.
 6. For prompts that are **ambiguously scoped**: ask the user. The design strategy differs fundamentally.
 
 ---
 
-## Cross-Model Quick Reference
+## Personality and Writing Control Patterns
 
-| Concept | Claude 4.6 | GPT-5.4 | Gemini 3.1 |
-|---------|-----------|---------|------------|
-| Reasoning depth | `effort` (low/medium/high/max) | `reasoning_effort` (none/low/medium/high/xhigh) | `thinking_level` (minimal/low/medium/high) |
-| Temperature | Default fine | Default fine | MUST be 1.0 |
-| Structured output | XML tags | XML blocks, output contracts | JSON schema |
-| Tool-use tone | Calm, normal language | Explicit persistence rules | Standard |
-| Constraint placement | Anywhere (XML-wrapped) | Named XML blocks | Negative constraints LAST |
-| Prefill/continuation | Not supported on last turn | Standard | Thought signatures required |
-
----
-
-## Personality and Voice Control (Customer-Facing Prompts)
+For customer-facing prompts that need specific voice, use this separation pattern (works across all models, explicitly supported by GPT-5.5's personality/collaboration split and Claude Opus 4.8):
 
 ```
 <personality_and_writing_controls>
@@ -430,3 +565,26 @@ Enumerate what the agent needs access to and verify completeness:
 ```
 
 Personality should not override task-specific output requirements. If the user asks for JSON, return JSON regardless of persona.
+
+---
+
+## Quick Reference: Cross-Model Prompt Translation
+
+| Concept | Claude Fable 5 / Mythos 5 | Claude Opus 4.8 | GPT-5.5 | Gemini 3.5 Flash |
+|---------|--------------------------|-----------------|---------|------------------|
+| Reasoning depth | `effort` (high/xhigh default; no max) | `effort` (low/medium/high/xhigh/max) | `reasoning_effort` (none/low/medium/high/xhigh) | `thinking_level` (minimal/low/medium/high) |
+| Thinking mode | Adaptive; summarized-only output; **no extended budget** | Adaptive, but OFF unless `thinking:{type:"adaptive"}` is set | Built-in; tuned via reasoning_effort | Dynamic; default level now `medium`; preserved across turns |
+| Default depth | high for most tasks; xhigh for capability-sensitive | xhigh for coding/agentic, high for intelligence-sensitive | re-evaluate low/medium before escalating | medium |
+| Sampling (temp/top_p/top_k) | Default fine | Default fine | Default fine | Remove — use defaults |
+| Instruction following | Brief instructions steer whole patterns; no over-enumeration | Literal; state scope explicitly | Outcome-first; decision rules over absolute rules | Concise; question/constraints last |
+| Reasoning reproduction | **Never instruct** (triggers `reasoning_extraction` refusal) | Avoid; use XML outputs instead | Avoid; use output contracts | Avoid |
+| Structured output | XML tags, structured outputs API | XML tags, structured outputs API | XML blocks, output contracts, `text.verbosity` | JSON schema, structured outputs |
+| Tool-use tone | Calm; effort=high increases tool use | Calm; raise effort for more tool use | Explicit persistence + stop rules + retrieval budgets | Action budget; lower thinking_level to reduce calls |
+| Constraint placement | Anywhere (XML-wrapped) | Anywhere (XML-wrapped) | Named XML blocks | Negative constraints LAST, after data |
+| Long sessions | Memory system + progress audit + context-budget reassurance | Context awareness + memory tool | phase param + compaction | Automatic thought preservation |
+| Safety refusals | Cybersecurity + biology → `stop_reason:"refusal"`; configure Opus 4.8 fallback | None (standard) | None (standard) | None (standard) |
+| Parallel subagents | Dispatched readily; prefer async comms | Spawns fewer; needs explicit instruction | Standard | Standard |
+| Prefill/continuation | Not supported on last turn | Not supported on last turn | Standard | Thought signatures required for function calling |
+| Function-call matching | Standard | Standard | Standard | Strict: id + name + count must match |
+| Unrequested actions | Add scope boundary instruction | Minimal risk | Minimal risk | Minimal risk |
+| Long-run output style | Async communication style block needed for legibility | Standard | Standard | Standard |
