@@ -25,6 +25,9 @@ Review, draft, and improve legal writing — correspondence, case analysis repor
 ### [`prompt-architect`](./prompt-architect/)
 Create and optimise prompt templates for AI assistants and autonomous agents. Covers chat mode vs. autonomous mode design, model-specific patterns for Claude Fable 5 / Mythos 5, Claude Opus 4.8, GPT-5.5, and Gemini 3.5 Flash, and a full library of structured blocks for agentic workflows (verification loops, completeness contracts, tool persistence, memory systems, scope boundaries, and more).
 
+### [`xquik-public-x-research`](./xquik-public-x-research/)
+Collect and validate public X evidence with Xquik's REST API. Covers search, timelines, threads, trends, monitors, exports, and provenance guardrails for public or user-authorized X data.
+
 ## How to Use
 
 Each skill folder contains a `SKILL.md` file with the full instruction set. Some skills include a `references/` or `scripts/` folder with supporting material (domain patterns, examples, checklists, helper scripts).
